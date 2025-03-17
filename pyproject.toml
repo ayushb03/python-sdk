@@ -30,6 +30,9 @@ dependencies = [
     "sse-starlette>=1.6.1",
     "pydantic-settings>=2.5.2",
     "uvicorn>=0.23.1",
+    "orjson>=3.9.10",
+    "msgpack>=1.0.7",
+    "msgspec>=0.18.5",
 ]
 
 [project.optional-dependencies]

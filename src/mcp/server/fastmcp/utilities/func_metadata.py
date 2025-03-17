@@ -14,6 +14,8 @@ from pydantic_core import PydanticUndefined
 
 from mcp.server.fastmcp.exceptions import InvalidSignature
 from mcp.server.fastmcp.utilities.logging import get_logger
+from mcp.shared.serialization import loads
+from mcp.shared.serialization_format import SerializationFormat
 
 logger = get_logger(__name__)
 
@@ -85,8 +87,12 @@ class FuncMetadata(BaseModel):
                 continue
             if isinstance(data[field_name], str):
                 try:
-                    pre_parsed = json.loads(data[field_name])
-                except json.JSONDecodeError:
+                    # Use optimized JSON parsing for better performance
+                    pre_parsed = loads(
+                        data[field_name].encode('utf-8'), 
+                        format=SerializationFormat.ORJSON
+                    )
+                except (json.JSONDecodeError, ValueError):
                     continue  # Not JSON - skip
                 if isinstance(pre_parsed, str):
                     # This is likely that the raw value is e.g. `"hello"` which we

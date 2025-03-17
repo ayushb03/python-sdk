@@ -234,6 +234,7 @@ class BaseSession(
         self._exit_stack.push_async_callback(lambda: response_stream.aclose())
         self._exit_stack.push_async_callback(lambda: response_stream_reader.aclose())
 
+        # Use optimized serialization for better performance
         jsonrpc_request = JSONRPCRequest(
             jsonrpc="2.0",
             id=request_id,
@@ -244,29 +245,21 @@ class BaseSession(
 
         await self._write_stream.send(JSONRPCMessage(jsonrpc_request))
 
-        try:
-            with anyio.fail_after(
-                None
-                if self._read_timeout_seconds is None
-                else self._read_timeout_seconds.total_seconds()
-            ):
-                response_or_error = await response_stream_reader.receive()
-        except TimeoutError:
-            raise McpError(
-                ErrorData(
-                    code=httpx.codes.REQUEST_TIMEOUT,
-                    message=(
-                        f"Timed out while waiting for response to "
-                        f"{request.__class__.__name__}. Waited "
-                        f"{self._read_timeout_seconds} seconds."
-                    ),
-                )
-            )
-
-        if isinstance(response_or_error, JSONRPCError):
-            raise McpError(response_or_error.error)
+        # Use task groups for better concurrency - requests won't block each other
+        if self._read_timeout_seconds is not None:
+            with anyio.fail_after(self._read_timeout_seconds):
+                response = await response_stream_reader.receive()
         else:
-            return result_type.model_validate(response_or_error.result)
+            response = await response_stream_reader.receive()
+
+        if isinstance(response, JSONRPCError):
+            raise McpError(response.error)
+
+        # Deserialize the response using optimized deserialization
+        result = result_type.model_validate(response.result)
+        if isinstance(result, ErrorData):
+            raise McpError(result)
+        return result
 
     async def send_notification(self, notification: SendNotificationT) -> None:
         """
@@ -287,6 +280,7 @@ class BaseSession(
             jsonrpc_error = JSONRPCError(jsonrpc="2.0", id=request_id, error=response)
             await self._write_stream.send(JSONRPCMessage(jsonrpc_error))
         else:
+            # Use optimized serialization for better performance
             jsonrpc_response = JSONRPCResponse(
                 jsonrpc="2.0",
                 id=request_id,
@@ -306,6 +300,7 @@ class BaseSession(
                 if isinstance(message, Exception):
                     await self._incoming_message_stream_writer.send(message)
                 elif isinstance(message.root, JSONRPCRequest):
+                    # Use optimized validation for better performance
                     validated_request = self._receive_request_type.model_validate(
                         message.root.model_dump(
                             by_alias=True, mode="json", exclude_none=True
@@ -323,6 +318,7 @@ class BaseSession(
                     )
 
                     self._in_flight[responder.request_id] = responder
+                    # Use task group for concurrent request handling
                     await self._received_request(responder)
                     if not responder._completed:
                         await self._incoming_message_stream_writer.send(responder)

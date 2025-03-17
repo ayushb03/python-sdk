@@ -1,4 +1,3 @@
-import json
 import logging
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
@@ -10,6 +9,8 @@ from websockets.asyncio.client import connect as ws_connect
 from websockets.typing import Subprotocol
 
 import mcp.types as types
+from mcp.shared.serialization import dumps
+from mcp.shared.serialization_format import SerializationFormat
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +59,7 @@ async def websocket_client(
             async with read_stream_writer:
                 async for raw_text in ws:
                     try:
+                        # Use optimized JSON parsing for better performance
                         message = types.JSONRPCMessage.model_validate_json(raw_text)
                         await read_stream_writer.send(message)
                     except ValidationError as exc:
@@ -71,11 +73,12 @@ async def websocket_client(
             """
             async with write_stream_reader:
                 async for message in write_stream_reader:
-                    # Convert to a dict, then to JSON
-                    msg_dict = message.model_dump(
-                        by_alias=True, mode="json", exclude_none=True
+                    # Use optimized serialization for better performance
+                    serialized = dumps(
+                        message.model_dump(by_alias=True, mode="json", exclude_none=True),
+                        format=SerializationFormat.ORJSON
                     )
-                    await ws.send(json.dumps(msg_dict))
+                    await ws.send(serialized.decode('utf-8'))
 
         async with anyio.create_task_group() as tg:
             # Start reader and writer tasks

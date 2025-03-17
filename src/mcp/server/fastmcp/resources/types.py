@@ -14,6 +14,8 @@ import pydantic_core
 from pydantic import Field, ValidationInfo
 
 from mcp.server.fastmcp.resources.base import Resource
+from mcp.shared.serialization import dumps
+from mcp.shared.serialization_format import SerializationFormat
 
 
 class TextResource(Resource):
@@ -64,7 +66,9 @@ class FunctionResource(Resource):
             if isinstance(result, str):
                 return result
             try:
-                return json.dumps(pydantic_core.to_jsonable_python(result))
+                # Use optimized serialization for better performance
+                return dumps(pydantic_core.to_jsonable_python(result), 
+                             format=SerializationFormat.MSGSPEC).decode('utf-8')
             except (TypeError, pydantic_core.PydanticSerializationError):
                 # If JSON serialization fails, try str()
                 return str(result)

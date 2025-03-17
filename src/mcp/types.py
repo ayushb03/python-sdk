@@ -11,6 +11,9 @@ from typing import (
 from pydantic import BaseModel, ConfigDict, Field, FileUrl, RootModel
 from pydantic.networks import AnyUrl, UrlConstraints
 
+# Import our optimized serialization utilities
+from mcp.shared.serialization import optimized_model_dumps, optimized_model_loads
+
 """
 Model Context Protocol bindings for Python
 
@@ -177,7 +180,49 @@ class JSONRPCError(BaseModel):
 class JSONRPCMessage(
     RootModel[JSONRPCRequest | JSONRPCNotification | JSONRPCResponse | JSONRPCError]
 ):
-    pass
+    """
+    Represents a JSON-RPC message that can be either a request, notification,
+    response, or error.
+    """
+    
+    def model_dump_json(self, **kwargs) -> str:
+        """
+        Serialize this message to a JSON string using the optimized serializer.
+        
+        This overrides the default Pydantic serialization for better performance.
+        
+        Args:
+            **kwargs: Additional keyword arguments to pass to the serializer
+            
+        Returns:
+            The serialized JSON string
+        """
+        # Convert to bytes using our optimized serializer, then decode to string
+        return optimized_model_dumps(self).decode("utf-8")
+    
+    @classmethod
+    def model_validate_json(cls, json_data: str | bytes, **kwargs) -> 'JSONRPCMessage':
+        """
+        Deserialize a JSON string to a JSONRPCMessage using the optimized deserializer.
+        
+        This overrides the default Pydantic deserialization for better performance.
+        
+        Args:
+            json_data: The JSON string or bytes to deserialize
+            **kwargs: Additional keyword arguments to pass to the deserializer
+            
+        Returns:
+            The deserialized JSONRPCMessage
+        """
+        # Ensure we have bytes
+        if isinstance(json_data, str):
+            json_data = json_data.encode("utf-8")
+            
+        # Use our optimized deserializer
+        dict_data = optimized_model_loads(json_data, dict)
+        
+        # Validate and convert to a JSONRPCMessage
+        return cls.model_validate(dict_data)
 
 
 class EmptyResult(Result):

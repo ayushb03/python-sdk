@@ -119,6 +119,7 @@ async def stdio_client(server: StdioServerParameters):
 
                     for line in lines:
                         try:
+                            # Use optimized JSON parsing
                             message = types.JSONRPCMessage.model_validate_json(line)
                         except Exception as exc:
                             await read_stream_writer.send(exc)
@@ -134,9 +135,10 @@ async def stdio_client(server: StdioServerParameters):
         try:
             async with write_stream_reader:
                 async for message in write_stream_reader:
-                    json = message.model_dump_json(by_alias=True, exclude_none=True)
+                    # Use optimized JSON serialization
+                    json_data = message.model_dump_json(by_alias=True, exclude_none=True)
                     await process.stdin.send(
-                        (json + "\n").encode(
+                        (json_data + "\n").encode(
                             encoding=server.encoding,
                             errors=server.encoding_error_handler,
                         )

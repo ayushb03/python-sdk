@@ -56,6 +56,10 @@ from .types import (
     Role as SamplingRole,
 )
 
+# Import shared config and serialization options for easy access
+from mcp.shared.config import configure
+from mcp.shared.serialization_format import SerializationFormat
+
 __all__ = [
     "CallToolRequest",
     "ClientCapabilities",
@@ -111,4 +115,6 @@ __all__ = [
     "stdio_server",
     "CompleteRequest",
     "JSONRPCResponse",
+    "configure",
+    "SerializationFormat",
 ]
