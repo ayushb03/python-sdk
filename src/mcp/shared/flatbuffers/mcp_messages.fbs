@@ -1,0 +1,57 @@
+// FlatBuffers schema for MCP messages
+namespace mcp.flatbuffers;
+
+// JSON-RPC message types
+enum MessageType : byte {
+  REQUEST = 0,
+  RESPONSE = 1,
+  NOTIFICATION = 2,
+  ERROR = 3
+}
+
+// Common fields for all JSON-RPC messages
+table JsonRpcMessage {
+  jsonrpc:string = "2.0";
+  id:string;
+  message_type:MessageType;
+}
+
+// Request message
+table Request {
+  method:string;
+  params:string;  // JSON-encoded parameters
+}
+
+// Response message
+table Response {
+  result:string;  // JSON-encoded result
+}
+
+// Notification message
+table Notification {
+  method:string;
+  params:string;  // JSON-encoded parameters
+}
+
+// Error message
+table Error {
+  code:int;
+  message:string;
+  data:string;  // Optional JSON-encoded error data
+}
+
+// Root type that contains all possible message types
+union MessageData {
+  Request,
+  Response,
+  Notification,
+  Error
+}
+
+// The root message container
+table McpMessage {
+  json_rpc:JsonRpcMessage;
+  data:MessageData;
+}
+
+root_type McpMessage; 

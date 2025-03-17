@@ -46,6 +46,7 @@
   - [Configuring Serialization Format](#configuring-serialization-format)
   - [Performance Comparison](#performance-comparison)
   - [Best Practices for Low Latency](#best-practices-for-low-latency)
+  - [FlatBuffers Support](#flatbuffers-support)
 
 [pypi-badge]: https://img.shields.io/pypi/v/mcp.svg
 [pypi-url]: https://pypi.org/project/mcp/
@@ -255,7 +256,6 @@ def review_code(code: str) -> str:
 def debug_error(error: str) -> list[types.Message]:
     return [
         types.UserMessage("I'm seeing this error:"),
-        types.UserMessage(error),
         types.AssistantMessage("I'll help debug that. What have you tried so far?"),
     ]
 ```
@@ -642,6 +642,9 @@ configure(serialization_format=SerializationFormat.MSGPACK)
 # Use msgspec for schema-aware serialization (fastest overall with schemas)
 configure(serialization_format=SerializationFormat.MSGSPEC)
 
+# Use FlatBuffers for maximum performance with zero-copy memory access
+configure(serialization_format=SerializationFormat.FLATBUFFERS)
+
 # Use standard library JSON (not recommended for performance-critical applications)
 configure(serialization_format=SerializationFormat.JSON)
 ```
@@ -656,24 +659,29 @@ Here's a rough performance comparison of the different serialization options bas
 | ORJSON | ~4-6x faster | ~4-6x faster | Similar to JSON | Human readable |
 | MSGPACK | ~1.9-3x faster | ~1.9-3x faster | ~0.7x smaller | Binary format |
 | MSGSPEC | ~3-10x faster | ~3-10x faster | Similar to JSON | Schema validation |
+| FLATBUFFERS | ~8-15x faster | ~20-100x faster | ~0.8x smaller | Zero-copy access |
 
 Our benchmarks show that for simple and complex data structures, ORJSON provides approximately 4x better performance compared to standard JSON. MSGSPEC is also very fast at approximately 3.5x faster for standard operations, and can be even faster when using schema validation.
+
+FlatBuffers offers the most significant performance improvements, especially for deserialization where it can be up to 100x faster for large messages due to its zero-copy memory access. It's particularly effective for structured data like JSON-RPC messages.
 
 ### Best Practices for Low Latency
 
 For the lowest latency performance:
 
-1. **Use `SerializationFormat.MSGSPEC` when you have schemas available** - The schema-aware serialization provides the fastest overall performance when the data structure is known in advance.
+1. **Use `SerializationFormat.FLATBUFFERS` for the most demanding performance requirements** - FlatBuffers provides the fastest overall performance, especially for deserialization, due to its zero-copy memory access.
 
-2. **Use `SerializationFormat.ORJSON` for general purpose JSON operations** - ORJSON is consistently the fastest option for general-purpose JSON serialization and deserialization.
+2. **Use `SerializationFormat.MSGSPEC` when you have schemas available** - The schema-aware serialization provides excellent performance when the data structure is known in advance.
 
-3. **Use `SerializationFormat.MSGPACK` when bandwidth is a concern** - If you need to minimize network bandwidth or storage size, MSGPACK provides the smallest payload size.
+3. **Use `SerializationFormat.ORJSON` for general purpose JSON operations** - ORJSON is consistently fast for general-purpose JSON serialization and deserialization.
 
-4. **Avoid using standard library JSON for performance-critical code** - The standard library JSON module is significantly slower than the optimized alternatives.
+4. **Use `SerializationFormat.MSGPACK` when bandwidth is a concern** - If you need to minimize network bandwidth or storage size, MSGPACK provides the smallest payload size.
 
-5. **Cache serialized messages when possible** - For frequently used static messages, consider caching the serialized form.
+5. **Avoid using standard library JSON for performance-critical code** - The standard library JSON module is significantly slower than the optimized alternatives.
 
-6. **Use model serialization helpers** - The SDK provides optimized model serialization helpers that are aware of Pydantic models:
+6. **Cache serialized messages when possible** - For frequently used static messages, consider caching the serialized form.
+
+7. **Use model serialization helpers** - The SDK provides optimized model serialization helpers that are aware of Pydantic models:
    ```python
    from mcp.shared.serialization import model_dumps, model_loads
    
@@ -684,10 +692,45 @@ For the lowest latency performance:
    my_model = model_loads(serialized, MyModelClass)
    ```
 
+### FlatBuffers Support
+
+FlatBuffers is a cross-platform serialization library optimized for maximum performance and minimal memory footprint. It was originally created at Google for game development and other performance-critical applications.
+
+Key advantages of FlatBuffers:
+
+- **Zero-copy deserialization**: Access your data without parsing or unpacking
+- **Direct memory access**: Read fields directly from the buffer without allocating objects
+- **Schema-based validation**: Strong typing ensures data integrity
+- **Backward/forward compatibility**: Add fields without breaking existing code
+- **Extremely fast deserialization**: Orders of magnitude faster than other formats
+- **Cross-platform support**: Works in many languages and platforms
+
+To use FlatBuffers with the MCP SDK:
+
+1. Install the FlatBuffers library:
+   ```bash
+   pip install flatbuffers
+   ```
+
+2. Configure the SDK to use FlatBuffers:
+   ```python
+   from mcp.shared.config import configure, SerializationFormat
+   
+   # Set FlatBuffers as the default serialization format
+   configure(serialization_format=SerializationFormat.FLATBUFFERS)
+   ```
+
+3. Use the SDK normally - serialization and deserialization will automatically use FlatBuffers
+
 ### Running the Performance Benchmark
 
-You can run the included performance benchmark to see the actual speedup on your system:
+You can run the included performance benchmarks to see the actual speedup on your system:
 
 ```bash
+# General performance comparison
 python examples/performance_optimization.py
+
+# FlatBuffers-specific benchmark
+python examples/flatbuffers_benchmark.py
+```
 ```

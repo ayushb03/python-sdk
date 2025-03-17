@@ -19,6 +19,13 @@ from mcp.shared.serialization_format import SerializationFormat
 # Type variables for generic functions
 T = TypeVar("T")
 
+# Conditionally import FlatBuffers
+try:
+    from mcp.shared.flatbuffers import serialize_message, deserialize_message, flatbuffers_available
+    _FLATBUFFERS_AVAILABLE = flatbuffers_available()
+except ImportError:
+    _FLATBUFFERS_AVAILABLE = False
+
 
 def configure_serialization(format: SerializationFormat) -> None:
     """Configure the default serialization format."""
@@ -42,11 +49,46 @@ def dumps(obj: Any, format: Optional[SerializationFormat] = None) -> bytes:
     if format == SerializationFormat.JSON:
         return json.dumps(obj).encode("utf-8")
     elif format == SerializationFormat.ORJSON:
+        # Handle JSONRPCMessage specifically for better performance
+        if hasattr(obj, 'model_dump'):
+            # For Pydantic models, convert to dict first
+            obj_dict = obj.model_dump(by_alias=True, mode="json", exclude_none=True)
+            return orjson.dumps(obj_dict)
         return orjson.dumps(obj)
     elif format == SerializationFormat.MSGPACK:
+        # Handle JSONRPCMessage specifically for better performance
+        if hasattr(obj, 'model_dump'):
+            # For Pydantic models, convert to dict first
+            obj_dict = obj.model_dump(by_alias=True, mode="json", exclude_none=True)
+            return msgpack.packb(obj_dict, use_bin_type=True)
         return msgpack.packb(obj, use_bin_type=True)
     elif format == SerializationFormat.MSGSPEC:
+        # Handle JSONRPCMessage specifically for better performance
+        if hasattr(obj, 'model_dump'):
+            # For Pydantic models, convert to dict first
+            obj_dict = obj.model_dump(by_alias=True, mode="json", exclude_none=True)
+            return msgspec.json.encode(obj_dict)
         return msgspec.json.encode(obj)
+    elif format == SerializationFormat.FLATBUFFERS:
+        if not _FLATBUFFERS_AVAILABLE:
+            raise ImportError("FlatBuffers is not available. Install with 'pip install flatbuffers'")
+        
+        # For JSONRPCMessage, use our specialized serializer
+        if hasattr(obj, 'root') and hasattr(obj, 'model_dump'):
+            try:
+                from mcp.shared.flatbuffers import serialize_message
+                return serialize_message(obj)
+            except Exception as e:
+                # If specialized serialization fails, fall back to JSON
+                obj_dict = obj.model_dump(by_alias=True, mode="json", exclude_none=True)
+                return orjson.dumps(obj_dict)
+        
+        # Fallback to JSON serialization for non-JSONRPCMessage objects
+        # This is a temporary solution until we implement FlatBuffers for all types
+        if hasattr(obj, 'model_dump'):
+            obj_dict = obj.model_dump(by_alias=True, mode="json", exclude_none=True)
+            return orjson.dumps(obj_dict)
+        return orjson.dumps(obj)
     else:
         raise ValueError(f"Unsupported serialization format: {format}")
 
@@ -75,6 +117,28 @@ def loads(data: bytes, format: Optional[SerializationFormat] = None, type_: Opti
         if type_ is not None:
             return msgspec.json.decode(data, type=type_)
         return msgspec.json.decode(data)
+    elif format == SerializationFormat.FLATBUFFERS:
+        if not _FLATBUFFERS_AVAILABLE:
+            raise ImportError("FlatBuffers is not available. Install with 'pip install flatbuffers'")
+        
+        try:
+            # First check if this is a JSONRPCMessage type
+            if len(data) > 4 and data[0:4] == b'FLAT':
+                # This appears to be a FlatBuffers message
+                from mcp.shared.flatbuffers import deserialize_message
+                return deserialize_message(data)
+            
+            # If it doesn't have the FlatBuffers header, fall back to JSON
+            if type_ is not None and hasattr(type_, 'model_validate'):
+                # If we have a Pydantic model type, use it
+                json_data = orjson.loads(data)
+                return type_.model_validate(json_data)
+            
+            # Otherwise just return the raw JSON data
+            return orjson.loads(data)
+        except Exception as e:
+            # If deserialization fails, try a simpler approach
+            return orjson.loads(data)
     else:
         raise ValueError(f"Unsupported serialization format: {format}")
 

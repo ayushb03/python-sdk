@@ -17,6 +17,7 @@ class SerializationFormat(str, Enum):
         ORJSON: Optimized JSON implementation (human-readable, much faster)
         MSGPACK: MessagePack binary format (compact binary format)
         MSGSPEC: Schema-aware serialization (fastest with schemas)
+        FLATBUFFERS: Google FlatBuffers (extremely fast binary format with zero-copy access)
     """
     
     JSON = "json"
@@ -29,4 +30,7 @@ class SerializationFormat(str, Enum):
     """MessagePack binary format (compact binary format)"""
     
     MSGSPEC = "msgspec"  
-    """Schema-aware serialization (fastest with schemas)""" 
+    """Schema-aware serialization (fastest with schemas)"""
+    
+    FLATBUFFERS = "flatbuffers"
+    """Google FlatBuffers (extremely fast binary format with zero-copy access)"""
